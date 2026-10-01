@@ -53,3 +53,16 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Keil uVision specific
+*.uvguix.*
+*.dep
+*.bak
+*.crf
+*.lnp
+*.sct
+out_580/
+
+# Windows/WSL artifacts
+*:Zone.Identifier
+unused.txt:Zone.Identifier
