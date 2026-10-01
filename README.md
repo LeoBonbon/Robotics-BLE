@@ -8,6 +8,7 @@ Simple DA14580 BLE firmware built on SDK 5.0.4 for the UQ Biorobotics Lab. It co
 ## Where to find my code
 Everything I modified for this task is in these two files:
 1.`DA1458x_SDK/5.0.4/projects/target_apps/ble_examples/ble_app_peripheral/src/platform/user_periph_setup.c` — Sets up the hardware pins and peripherals.
+
 2. `DA1458x_SDK/5.0.4/projects/target_apps/ble_examples/ble_app_peripheral/src/user_custs1_impl.c` — Handles the Bluetooth connection, GATT writes, and PWM timer logic to generate the wave.
 
 ## Features
