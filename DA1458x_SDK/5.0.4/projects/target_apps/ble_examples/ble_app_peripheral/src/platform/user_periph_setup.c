@@ -25,6 +25,11 @@
 #include "global_io.h"
 #include "gpio.h"
 #include "uart.h"                    // UART initialization
+#include "pwm.h"
+
+#define PWM_PORT   GPIO_PORT_1
+#define PWM_PIN  GPIO_PIN_3
+
 
 /**
  ****************************************************************************************
@@ -33,6 +38,21 @@
  * @return void
  ****************************************************************************************
  */
+
+void set_pwm_signal(uint16_t frequency_hz, uint8_t duty_cycle_pct)
+{
+  // 1. Calculate total ticks required for the target frequency
+  // (Using a 32-bit integer so the 2,000,000 math doesn't overflow)
+  uint32_t total_ticks = 2000000 / frequency_hz;
+
+  // 2. Calculate how many of those ticks should be HIGH vs LOW
+  uint16_t high_ticks = (total_ticks * duty_cycle_pct) / 100;
+  uint16_t low_ticks = total_ticks - high_ticks;
+
+  // 3. Send the calculated ticks to the hardware registers
+  timer0_set_pwm_high_counter(high_ticks);
+  timer0_set_pwm_low_counter(low_ticks);
+}
 
 #ifdef CFG_DEVELOPMENT_DEBUG
 
@@ -53,6 +73,7 @@ i.e.
     RESERVE_GPIO(UART2_RX, UART2_RX_GPIO_PORT, UART2_RX_GPIO_PIN, PID_UART2_RX);
 #endif
     RESERVE_GPIO(LED, GPIO_LED_PORT, GPIO_LED_PIN, PID_GPIO);
+    RESERVE_GPIO(PWM0, PWM_PORT, PWM_PIN, PID_PWM0);
 }
 #endif // CFG_DEVELOPMENT_DEBUG
 
@@ -63,6 +84,7 @@ void set_pad_functions(void)        // set gpio port function mode
     GPIO_ConfigurePin(UART2_RX_GPIO_PORT, UART2_RX_GPIO_PIN, INPUT, PID_UART2_RX, false);
 #endif
     GPIO_ConfigurePin(GPIO_LED_PORT, GPIO_LED_PIN, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PWM_PORT, PWM_PIN, OUTPUT, PID_PWM0, false);
 }
 
 void periph_init(void)
@@ -90,4 +112,14 @@ void periph_init(void)
 
    // Enable the pads
     SetBits16(SYS_CTRL_REG, PAD_LATCH_EN, 1);
+
+     // --- START TIMER0 PWM ---
+    SetBits16(CLK_PER_REG, TMR_ENABLE, 1); // <--- CRITICAL: Power on the Timer module
+    
+    set_tmr_div(CLK_PER_REG_TMR_DIV_8); 
+    timer0_init(TIM0_CLK_FAST, PWM_MODE_ONE, TIM0_CLK_NO_DIV);
+    
+    set_pwm_signal(200, 25); 
+    
+    timer0_start();
 }
