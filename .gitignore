@@ -66,3 +66,10 @@ out_580/
 # Windows/WSL artifacts
 *:Zone.Identifier
 unused.txt:Zone.Identifier
+
+# --- Dialog DA14580 SDK Exceptions ---
+# Track pre-compiled ROM patches normally ignored by *.obj
+!DA1458x_SDK/5.0.4/sdk/platform/patch_code/DA14580/obj/*.obj
+
+# Track memory scatter files normally ignored by *.sct
+!DA1458x_SDK/5.0.4/sdk/common_project_files/scatterfiles/*.sct
