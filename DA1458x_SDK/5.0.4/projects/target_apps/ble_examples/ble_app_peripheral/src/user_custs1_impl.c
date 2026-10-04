@@ -27,13 +27,26 @@
 #include "user_custs1_impl.h"
 #include "user_peripheral.h"
 #include "user_periph_setup.h"
+#include "app_easy_timer.h"
 
-extern void set_pwm_signal(uint16_t frequency_hz, uint8_t duty_cycle_pct);
+// Bring in the hardware functions you just wrote
+extern void pwm_output_ON(uint8_t pin_no, uint16_t freq, uint8_t duty);
+extern void pwm_output_OFF(void);
+
+
 
 /*
 * GLOBAL VARIABLE DEFINITIONS
 ****************************************************************************************
 */
+
+// Track the 500ms safety timer
+timer_hnd stim_timer = EASY_TIMER_INVALID_TIMER;
+// The callback that triggers after 500ms
+void stim_timer_cb(void) {
+    pwm_output_OFF();
+    stim_timer = EASY_TIMER_INVALID_TIMER;
+}
 
 ke_msg_id_t timer_used;
 
@@ -43,25 +56,24 @@ ke_msg_id_t timer_used;
 */
 
 void user_custs1_ctrl_wr_ind_handler(ke_msg_id_t const msgid,
-                   struct custs1_val_write_ind const *param,
-                   ke_task_id_t const dest_id,
-                   ke_task_id_t const src_id)
+                                      struct custs1_val_write_ind const *param,
+                                      ke_task_id_t const dest_id,
+                                      ke_task_id_t const src_id)
 {
-  uint8_t val = 0;
-  memcpy(&val, &param->value[0], param->length);
-
-  if (val != CUSTS1_CP_ADC_VAL1_DISABLE)
-  {
-    timer_used = app_easy_timer(APP_PERIPHERAL_CTRL_TIMER_DELAY, app_adcval1_timer_cb_handler);
-  }
-  else
-  {
-    if (timer_used != 0xFFFF)
+    uint8_t val = 0;
+    memcpy(&val, &param->value[0], param->length);
+    if (val != CUSTS1_CP_ADC_VAL1_DISABLE)
     {
-      app_easy_timer_cancel(timer_used);
-      timer_used = 0xFFFF;
+        timer_used = app_easy_timer(APP_PERIPHERAL_CTRL_TIMER_DELAY, app_adcval1_timer_cb_handler);
     }
-  }
+    else
+    {
+        if (timer_used != 0xFFFF)
+        {
+            app_easy_timer_cancel(timer_used);
+            timer_used = 0xFFFF;
+        }
+    }
 }
 
 
@@ -137,16 +149,14 @@ void app_adcval1_timer_cb_handler()
                            custs1_val_ntf_req,
                            DEF_CUST1_ADC_VAL_1_CHAR_LEN);
 
-  // ADC value to be sampled
-  static uint16_t sample;
-  sample = (sample <= 0xffff) ? (sample + 1) : 0;
-
-  req->conhdl = app_env->conhdl;
-  req->handle = CUST1_IDX_ADC_VAL_1_VAL;
-  req->length = DEF_CUST1_ADC_VAL_1_CHAR_LEN;
-  memcpy(req->value, &sample, DEF_CUST1_ADC_VAL_1_CHAR_LEN);
-
-  ke_msg_send(req);
+    // ADC value to be sampled
+    static uint16_t sample;
+    sample = (sample <= 0xffff) ? (sample + 1) : 0;
+    req->conhdl = app_env->conhdl;
+    req->handle = CUST1_IDX_ADC_VAL_1_VAL;
+    req->length = DEF_CUST1_ADC_VAL_1_CHAR_LEN;
+    memcpy(req->value, &sample, DEF_CUST1_ADC_VAL_1_CHAR_LEN);
+    ke_msg_send(req);
 
   if (ke_state_get(TASK_APP) == APP_CONNECTED)
   {
@@ -155,21 +165,30 @@ void app_adcval1_timer_cb_handler()
   }
 }
 
-extern void set_pwm_signal(uint16_t frequency_hz, uint8_t duty_cycle_pct);
-
 void user_custs1_led_wr_ind_handler(ke_msg_id_t const msgid,
-                  struct custs1_val_write_ind const *param,
-                  ke_task_id_t const dest_id,
-                  ke_task_id_t const src_id)
+                                    struct custs1_val_write_ind const *param,
+                                    ke_task_id_t const dest_id,
+                                    ke_task_id_t const src_id)
 {
-  // Extract the first byte of data sent from your phone
-  uint8_t duty_cycle = param->value[0];
-
-  // Cap the value at 100% to prevent timer overflow glitches
-  if (duty_cycle > 100) {
-    duty_cycle = 100;
-  }
-
-  // Dynamically update the LED brightness while keeping the 200 Hz frequency
-  set_pwm_signal(200, duty_cycle);
+    // Check if the phone actually sent at least 3 bytes
+    if (param->length >= 3) {
+        
+        // Extract the 3 bytes (0: Pin, 1: Frequency, 2: Duty Cycle)
+        uint8_t pin_no = param->value[0];
+        uint16_t freq  = param->value[1];
+        uint8_t duty   = param->value[2];
+        // Safety caps
+        if (duty > 100) duty = 100;
+        if (freq == 0) freq = 1; // Prevent divide-by-zero if user sends 0Hz
+        // If a previous 500ms stimulation is still actively running, cancel it
+        if (stim_timer != EASY_TIMER_INVALID_TIMER) {
+            app_easy_timer_cancel(stim_timer);
+            pwm_output_OFF();
+        }
+        // 1. Turn on the hardware for the requested pin
+        pwm_output_ON(pin_no, freq, duty);
+        // 2. Start the 500ms auto-off timer (50 units * 10ms = 500ms)
+        stim_timer = app_easy_timer(50, stim_timer_cb);
+    }
 }
+
