@@ -94,7 +94,7 @@ void set_pad_functions(void)        // set gpio port function mode
     GPIO_ConfigurePin(PORT_B, PIN_B, OUTPUT, PID_GPIO, false);
     GPIO_ConfigurePin(PORT_C, PIN_C, OUTPUT, PID_GPIO, false);
     GPIO_ConfigurePin(PORT_D, PIN_D, OUTPUT, PID_GPIO, false);
-
+}
 void periph_init(void)
 {
     // Power up peripherals' power domain
