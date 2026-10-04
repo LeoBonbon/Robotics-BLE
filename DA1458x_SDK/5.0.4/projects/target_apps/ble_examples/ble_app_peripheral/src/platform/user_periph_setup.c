@@ -27,8 +27,7 @@
 #include "uart.h"                    // UART initialization
 #include "pwm.h"
 
-#define PWM_PORT   GPIO_PORT_1
-#define PWM_PIN  GPIO_PIN_3
+
 
 
 /**
@@ -39,20 +38,24 @@
  ****************************************************************************************
  */
 
-void set_pwm_signal(uint16_t frequency_hz, uint8_t duty_cycle_pct)
-{
-  // 1. Calculate total ticks required for the target frequency
-  // (Using a 32-bit integer so the 2,000,000 math doesn't overflow)
-  uint32_t total_ticks = 2000000 / frequency_hz;
+ // Define 4 physically exposed pins on the HJ-580XP module
+#define PORT_A GPIO_PORT_0
+#define PIN_A  GPIO_PIN_4    // Physical pad P04
 
-  // 2. Calculate how many of those ticks should be HIGH vs LOW
-  uint16_t high_ticks = (total_ticks * duty_cycle_pct) / 100;
-  uint16_t low_ticks = total_ticks - high_ticks;
+#define PORT_B GPIO_PORT_0
+#define PIN_B  GPIO_PIN_5    // Physical pad P05
 
-  // 3. Send the calculated ticks to the hardware registers
-  timer0_set_pwm_high_counter(high_ticks);
-  timer0_set_pwm_low_counter(low_ticks);
-}
+#define PORT_C GPIO_PORT_0
+#define PIN_C  GPIO_PIN_6    // Physical pad P06
+
+#define PORT_D GPIO_PORT_1
+#define PIN_D  GPIO_PIN_3    // Physical pad P13
+
+// Track which port and pin is currently active
+GPIO_PORT active_port = PORT_A;
+GPIO_PIN  active_pin  = PIN_A;
+
+
 
 #ifdef CFG_DEVELOPMENT_DEBUG
 
@@ -72,8 +75,11 @@ i.e.
     RESERVE_GPIO(UART2_TX, UART2_TX_GPIO_PORT, UART2_TX_GPIO_PIN, PID_UART2_TX);
     RESERVE_GPIO(UART2_RX, UART2_RX_GPIO_PORT, UART2_RX_GPIO_PIN, PID_UART2_RX);
 #endif
-    RESERVE_GPIO(LED, GPIO_LED_PORT, GPIO_LED_PIN, PID_GPIO);
-    RESERVE_GPIO(PWM0, PWM_PORT, PWM_PIN, PID_PWM0);
+   // Reserve all 4 physical pins
+    RESERVE_GPIO(STIM_A, PORT_A, PIN_A, PID_GPIO);
+    RESERVE_GPIO(STIM_B, PORT_B, PIN_B, PID_GPIO);
+    RESERVE_GPIO(STIM_C, PORT_C, PIN_C, PID_GPIO);
+    RESERVE_GPIO(STIM_D, PORT_D, PIN_D, PID_GPIO);
 }
 #endif // CFG_DEVELOPMENT_DEBUG
 
@@ -83,9 +89,11 @@ void set_pad_functions(void)        // set gpio port function mode
     GPIO_ConfigurePin(UART2_TX_GPIO_PORT, UART2_TX_GPIO_PIN, OUTPUT, PID_UART2_TX, false);
     GPIO_ConfigurePin(UART2_RX_GPIO_PORT, UART2_RX_GPIO_PIN, INPUT, PID_UART2_RX, false);
 #endif
-    GPIO_ConfigurePin(GPIO_LED_PORT, GPIO_LED_PIN, OUTPUT, PID_GPIO, false);
-    GPIO_ConfigurePin(PWM_PORT, PWM_PIN, OUTPUT, PID_PWM0, false);
-}
+     // BOOT REQUIREMENT: Initialize all 4 physical pins as plain GPIO held LOW (false)
+    GPIO_ConfigurePin(PORT_A, PIN_A, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PORT_B, PIN_B, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PORT_C, PIN_C, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PORT_D, PIN_D, OUTPUT, PID_GPIO, false);
 
 void periph_init(void)
 {
@@ -112,14 +120,49 @@ void periph_init(void)
 
    // Enable the pads
     SetBits16(SYS_CTRL_REG, PAD_LATCH_EN, 1);
+}
 
-     // --- START TIMER0 PWM ---
-    SetBits16(CLK_PER_REG, TMR_ENABLE, 1); // <--- CRITICAL: Power on the Timer module
+// TURN ON FUNCTION
+void pwm_output_ON(uint8_t pin_no, uint16_t freq, uint8_t duty) {
+    // 1. Map the Bluetooth byte (0-3) to the physical port and pin
+    switch(pin_no) {
+        case 0: active_port = PORT_A; active_pin = PIN_A; break;
+        case 1: active_port = PORT_B; active_pin = PIN_B; break;
+        case 2: active_port = PORT_C; active_pin = PIN_C; break;
+        case 3: active_port = PORT_D; active_pin = PIN_D; break;
+        default: return; // Exit if an invalid pin is requested
+    }
+
+    // 2. Dynamically route the PWM hardware to the requested pin
+    GPIO_ConfigurePin(active_port, active_pin, OUTPUT, PID_PWM0, false);
+
+    // 3. Calculate timer ticks
+    uint32_t total_ticks = 2000000 / freq;
+    uint16_t high_ticks = (total_ticks * duty) / 100;
+    uint16_t low_ticks = total_ticks - high_ticks;
+    
+    if (high_ticks == 0) high_ticks = 1;
+    if (low_ticks == 0) low_ticks = 1;
+
+    // 4. Load the timer and start the PWM output
+    timer0_set_pwm_high_counter(high_ticks);
+    timer0_set_pwm_low_counter(low_ticks);
+    
+    SetBits16(CLK_PER_REG, TMR_ENABLE, 1);
     
     set_tmr_div(CLK_PER_REG_TMR_DIV_8); 
     timer0_init(TIM0_CLK_FAST, PWM_MODE_ONE, TIM0_CLK_NO_DIV);
     
-    set_pwm_signal(200, 25); 
+  
     
     timer0_start();
+}
+// TURN OFF FUNCTION
+void pwm_output_OFF(void) {
+    // 1. Stop the hardware timer
+    timer0_stop();
+    SetBits16(CLK_PER_REG, TMR_ENABLE, 0);
+
+    // 2. Revert the active pin back to a standard GPIO and pull it LOW
+    GPIO_ConfigurePin(active_port, active_pin, OUTPUT, PID_GPIO, false);
 }
