@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bio-Robotics Stimulation</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background-color: #f4f4f9; }
+    h2 { color: #333; }
+    button { 
+      padding: 25px 40px; 
+      font-size: 22px; 
+      font-weight: bold;
+      margin: 15px; 
+      border: none;
+      border-radius: 12px; 
+      cursor: pointer; 
+      width: 80%;
+      max-width: 400px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .connect { background-color: #28a745; color: white; }
+    .fire { background-color: #007bff; color: white; }
+    .fire:active { background-color: #0056b3; }
+    #status { margin-top: 20px; font-size: 18px; color: #666; font-weight: bold;}
+  </style>
+</head>
+<body>
+
+  <h2>Bio-Robotics Control Pad</h2>
+  
+  <button class="connect" onclick="connectToBoard()">Connect to DIALOG-PRPH</button>
+  <p id="status">Status: Disconnected</p>
+  <hr style="width: 80%; border-top: 2px solid #ddd; margin: 30px auto;">
+
+  <!-- Experiment Macros -->
+  <button class="fire" onclick="sendCommand([0x00, 0xC8, 0x32])">Fire P04 (Pin A)</button><br>
+  <button class="fire" onclick="sendCommand([0x01, 0xC8, 0x32])">Fire P05 (Pin B)</button><br>
+  <button class="fire" onclick="sendCommand([0x05, 0xC8, 0x32])">Dual Fire P04 / P05</button><br>
+
+  <script>
+    let rxCharacteristic;
+
+    async function connectToBoard() {
+      const statusText = document.getElementById("status");
+      try {
+        statusText.innerText = "Scanning for DIALOG-PRPH...";
+        
+        // Request the specific device and the Nordic UART Service
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: 'DIALOG-PRPH' }],
+          optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+        });
+        
+        statusText.innerText = "Connecting to GATT Server...";
+        const server = await device.gatt.connect();
+        
+        statusText.innerText = "Getting UART Service...";
+        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+        
+        statusText.innerText = "Getting RX Characteristic...";
+        rxCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
+        
+        statusText.innerText = "Status: Connected & Ready";
+        statusText.style.color = "#28a745";
+      } catch(error) {
+        statusText.innerText = "Error: " + error;
+        statusText.style.color = "red";
+      }
+    }
+
+    async function sendCommand(hexArray) {
+      if (!rxCharacteristic) {
+        alert("Please connect to the board first!");
+        return;
+      }
+      try {
+        // Convert the standard array into a raw byte buffer before sending
+        let payload = new Uint8Array(hexArray);
+        
+        // Write the data payload to the hardware
+        await rxCharacteristic.writeValueWithoutResponse(payload);
+        console.log("Successfully fired: ", hexArray);
+      } catch(error) {
+        document.getElementById("status").innerText = "Transmission Error: " + error;
+      }
+    }
+  </script>
+
+</body>
+</html>
