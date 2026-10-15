@@ -3,89 +3,176 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bio-Robotics Stimulation</title>
+  <title>Stimulation Controller</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background-color: #f4f4f9; }
-    h2 { color: #333; }
-    button { 
-      padding: 25px 40px; 
-      font-size: 22px; 
-      font-weight: bold;
-      margin: 15px; 
-      border: none;
-      border-radius: 12px; 
-      cursor: pointer; 
-      width: 80%;
-      max-width: 400px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      padding: 16px;
+      background-color: #f0f2f5;
+      color: #333;
     }
-    .connect { background-color: #28a745; color: white; }
-    .fire { background-color: #007bff; color: white; }
-    .fire:active { background-color: #0056b3; }
-    #status { margin-top: 20px; font-size: 18px; color: #666; font-weight: bold;}
+    .panel {
+      background: white;
+      border-radius: 14px;
+      padding: 16px;
+      max-width: 420px;
+      margin: 12px auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .btn {
+      padding: 12px 20px;
+      font-size: 18px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .btn-connect { background: #28a745; color: white; width: 100%; }
+    .btn-send { background: #d9534f; color: white; width: 100%; font-size: 22px; padding: 18px; }
+
+    .btn-step:active { background: #ced4da; }
+    .btn-send:active { background: #c9302c; }
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 12px 0;
+    }
+       select {
+      font-size: 18px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      width: 100%;
+    }
+    .preview {
+      font-family: monospace;
+      font-size: 16px;
+      color: #555;
+      margin-top: 8px;
+    }
+    .btn-step { background: #e9ecef; color: #333; width: 45px; font-size: 18px; padding: 8px 0; margin: 0 2px;}
+    .val-display { font-size: 18px; font-weight: bold; min-width: 70px; display: inline-block; }
+    #status { font-weight: bold; margin-top: 10px; color: #6c757d; }
   </style>
 </head>
 <body>
 
-  <h2>Bio-Robotics Control Pad</h2>
-  
-  <button class="connect" onclick="connectToBoard()">Connect to DIALOG-PRPH</button>
-  <p id="status">Status: Disconnected</p>
-  <hr style="width: 80%; border-top: 2px solid #ddd; margin: 30px auto;">
+  <h2>Insect Bio-Robotics Panel</h2>
 
-  <!-- Experiment Macros -->
-  <button class="fire" onclick="sendCommand([0x00, 0xC8, 0x32])">Fire P04 (Pin A)</button><br>
-  <button class="fire" onclick="sendCommand([0x01, 0xC8, 0x32])">Fire P05 (Pin B)</button><br>
-  <button class="fire" onclick="sendCommand([0x05, 0xC8, 0x32])">Dual Fire P04 / P05</button><br>
+  <div class="panel">
+    <button class="btn btn-connect" onclick="connectToBoard()">Connect to DIALOG-PRPH</button>
+    <p id="status">Status: Disconnected</p>
+  </div>
+
+  <div class="panel">
+    <!-- Channel / Pin Target -->
+    <div style="text-align: left; margin-bottom: 14px;">
+      <label style="font-weight: 600;">Target Output:</label>
+      <select id="pinSelect" onchange="updatePreview()">
+        <option value="0">P04 (Pin A)</option>
+        <option value="1">P05 (Pin B)</option>
+        <option value="2">P06 (Pin C)</option>
+        <option value="3">P13 (Pin D)</option>
+        <option value="4" selected>Dual Fire (P04 & P06)</option>
+      </select>
+    </div>
+
+    <!-- Frequency Control -->
+    <div class="control-row">
+      <span style="font-weight: 600;">Frequency:</span>
+      <div>
+        <button class="btn btn-step" onclick="adjustFreq(-10)">-10</button>
+        <button class="btn btn-step" onclick="adjustFreq(-1)">-1</button>
+        <span class="val-display" id="freqVal">200 Hz</span>
+        <button class="btn btn-step" onclick="adjustFreq(1)">+1</button>
+        <button class="btn btn-step" onclick="adjustFreq(10)">+10</button>
+      </div>
+    </div>
+
+    <!-- Duty Cycle Control -->
+    <div class="control-row">
+      <span style="font-weight: 600;">Duty Cycle:</span>
+      <div>
+        <button class="btn btn-step" onclick="adjustDuty(-10)">-10</button>
+        <button class="btn btn-step" onclick="adjustDuty(-1)">-1</button>
+        <span class="val-display" id="dutyVal">50 %</span>
+        <button class="btn btn-step" onclick="adjustDuty(1)">+1</button>
+        <button class="btn btn-step" onclick="adjustDuty(10)">+10</button>
+      </div>
+    </div>
+
+    <div class="preview">
+      Payload: <span id="hexPreview" style="font-weight: bold; color: #007bff;">0x05 0xC8 0x32</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <button class="btn btn-send" onclick="sendStimulation()">SEND STIMULATION</button>
+  </div>
 
   <script>
-    let rxCharacteristic;
+    let rxCharacteristic = null;
+    let freq = 200; // Default 200 Hz
+    let duty = 50;  // Default 50%
+
+   function adjustFreq(delta) {
+      freq = Math.min(255, Math.max(1, freq + delta)); 
+      document.getElementById("freqVal").innerText = freq + " Hz";
+      updatePreview();
+    }
+
+    function adjustDuty(delta) {
+      duty = Math.min(100, Math.max(1, duty + delta)); 
+      document.getElementById("dutyVal").innerText = duty + " %";
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const pin = parseInt(document.getElementById("pinSelect").value);
+      const toHex = (n) => "0x" + n.toString(16).padStart(2, "0").toUpperCase();
+      document.getElementById("hexPreview").innerText = `${toHex(pin)} ${toHex(freq)} ${toHex(duty)}`;
+    }
 
     async function connectToBoard() {
       const statusText = document.getElementById("status");
       try {
-        statusText.innerText = "Scanning for DIALOG-PRPH...";
-        
-        // Request the specific device and the Nordic UART Service
+        statusText.innerText = "Scanning...";
         const device = await navigator.bluetooth.requestDevice({
           filters: [{ name: 'DIALOG-PRPH' }],
           optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
         });
-        
-        statusText.innerText = "Connecting to GATT Server...";
+
+        statusText.innerText = "Connecting...";
         const server = await device.gatt.connect();
-        
-        statusText.innerText = "Getting UART Service...";
         const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-        
-        statusText.innerText = "Getting RX Characteristic...";
         rxCharacteristic = await service.getCharacteristic('6e400002-b5a3-f393-e0a9-e50e24dcca9e');
-        
+
         statusText.innerText = "Status: Connected & Ready";
         statusText.style.color = "#28a745";
-      } catch(error) {
-        statusText.innerText = "Error: " + error;
+      } catch (err) {
+        statusText.innerText = "Error: " + err;
         statusText.style.color = "red";
       }
     }
 
-    async function sendCommand(hexArray) {
+    async function sendStimulation() {
       if (!rxCharacteristic) {
-        alert("Please connect to the board first!");
+        alert("Connect to the board first.");
         return;
       }
       try {
-        // Convert the standard array into a raw byte buffer before sending
-        let payload = new Uint8Array(hexArray);
-        
-        // Write the data payload to the hardware
+        const pin = parseInt(document.getElementById("pinSelect").value);
+        const payload = new Uint8Array([pin, freq, duty]);
         await rxCharacteristic.writeValueWithoutResponse(payload);
-        console.log("Successfully fired: ", hexArray);
-      } catch(error) {
-        document.getElementById("status").innerText = "Transmission Error: " + error;
+      } catch (err) {
+        document.getElementById("status").innerText = "Send Error: " + err;
+        document.getElementById("status").style.color = "red";
       }
     }
-  </script>
 
+    updatePreview();
+  </script>
 </body>
 </html>
