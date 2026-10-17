@@ -16,11 +16,15 @@
       background: white;
       border-radius: 14px;
       padding: 20px;
-      max-width: 800px;
+      max-width: 850px;
       margin: 12px auto;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
-    .btn {
+    .btn-connect { 
+      background: #28a745; 
+      color: white; 
+      width: 100%; 
+      max-width: 300px; 
       padding: 12px 20px;
       font-size: 18px;
       font-weight: 600;
@@ -28,22 +32,19 @@
       border-radius: 10px;
       cursor: pointer;
     }
-    .btn-connect { background: #28a745; color: white; width: 100%; max-width: 300px; }
-    .btn-send { background: #d9534f; color: white; width: 100%; font-size: 22px; padding: 18px; margin-top: 15px; }
-    .btn-send:active { background: #c9302c; }
     
-    /* Layout mimicking the reference image */
+    /* Dashboard Layout */
     .dashboard {
       display: flex;
       justify-content: center;
       gap: 15px;
       flex-wrap: wrap;
-      margin-top: 20px;
+      margin-top: 10px;
     }
     fieldset {
       border: 1px solid #ccc;
       border-radius: 8px;
-      padding: 15px 10px;
+      padding: 15px 15px;
       text-align: right;
       background: #fafafa;
     }
@@ -72,25 +73,28 @@
     }
     input[disabled] { background: #e9ecef; color: #6c757d; }
     
-    .arrow-container {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-top: 10px;
-    }
+    /* Custom Arrow Buttons matching the reference */
     .btn-arrow {
-      background: #00bfff;
+      background: #33ccff;
       color: white;
-      font-size: 20px;
+      font-size: 24px;
       border: 2px solid #009acd;
       border-radius: 6px;
-      padding: 5px 15px;
+      padding: 10px 15px;
       cursor: pointer;
     }
     .btn-arrow:active { background: #009acd; }
+    
+    .btn-dice {
+      font-size: 32px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 5px;
+    }
+    .btn-dice:active { transform: scale(0.95); }
 
     #status { font-weight: bold; margin-top: 10px; color: #6c757d; }
-    select { font-size: 16px; padding: 8px; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -98,31 +102,26 @@
   <h2>Insect Bio-Robotics Panel</h2>
 
   <div class="panel">
-    <button class="btn btn-connect" onclick="connectToBoard()">Connect to DIALOG-PRPH</button>
+    <button class="btn-connect" onclick="connectToBoard()">Connect to DIALOG-PRPH</button>
     <p id="status">Status: Disconnected</p>
     <p id="gamepadStatus">Gamepad: Not Detected (Press any button to wake)</p>
   </div>
 
   <div class="panel">
-    <div style="margin-bottom: 15px; text-align: center;">
-      <label style="font-weight: bold; font-size: 18px;">Active Channel (Fires on 'A' Button):</label>
-      <select id="channelSelect">
-        <option value="right">Right Ant. (P04)</option>
-        <option value="left">Left Ant. (P05)</option>
-        <option value="cerci">Cerci (P06)</option>
-      </select>
-    </div>
-
     <div class="dashboard">
-      <!-- Frequency Column -->
-      <fieldset>
+      
+      <!-- Frequency Column (Updated Layout) -->
+      <fieldset style="display: flex; align-items: center; gap: 15px;">
         <legend>Frequency Settings</legend>
-        <div class="row"><label>Right Ant. (Hz):</label><input id="freq-right" type="number" value="70"></div>
-        <div class="row"><label>Left Ant. (Hz):</label><input id="freq-left" type="number" value="60"></div>
-        <div class="row"><label>Cerci (Hz):</label><input id="freq-cerci" type="number" value="70"></div>
-        <div class="arrow-container">
+        <div>
+          <div class="row"><label>Right Ant. (Hz):</label><input id="freq-right" type="number" value="70"></div>
+          <div class="row"><label>Left Ant. (Hz):</label><input id="freq-left" type="number" value="60"></div>
+          <div class="row"><label>Cerci (Hz):</label><input id="freq-cerci" type="number" value="70"></div>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
           <button class="btn-arrow" onclick="changeAllFreq(10)">⬆️</button>
           <button class="btn-arrow" onclick="changeAllFreq(-10)">⬇️</button>
+          <button class="btn-dice" title="Randomize (Placeholder)">🎲</button>
         </div>
       </fieldset>
 
@@ -137,16 +136,15 @@
       <!-- Pulse Width Column -->
       <fieldset>
         <legend>Pulse Width Settings</legend>
-        <div class="row"><label>Right Ant. (ms):</label><input id="pw-right" type="number" value="10"></div>
+        <div class="row"><label>Right Ant. (ms):</label><input id="pw-right" type="number" value="30"></div>
         <div class="row"><label>Left Ant. (ms):</label><input id="pw-left" type="number" value="5"></div>
         <div class="row"><label>Cerci (ms):</label><input id="pw-cerci" type="number" value="3"></div>
       </fieldset>
+      
     </div>
-
-    <button class="btn btn-send" onclick="sendStimulation()">SEND STIMULATION</button>
   </div>
 
- <script>
+  <script>
     let rxCharacteristic = null;
     let stimTimeout = null;
     
@@ -187,16 +185,12 @@
       }
     }
 
-    // Added targetOverride so the controller can bypass the dropdown menu
-    async function sendStimulation(targetOverride) {
+    async function sendStimulation(target) {
       if (!rxCharacteristic) {
-        alert("Connect to the board first.");
+        console.warn("Cannot send: Board not connected.");
         return;
       }
 
-      // Use the controller's button target, or fallback to the dropdown if clicking manually
-      const target = targetOverride || document.getElementById("channelSelect").value;
-      
       let pinNum = 0;
       if (target === "right") pinNum = 0; // P04
       if (target === "left") pinNum = 1;  // P05
@@ -224,27 +218,15 @@
       }
     }
 
-    // --- GAMEPAD (CONTROLLER) LOGIC ---
+    // --- GAMEPAD (CONTROLLER) & KEYBOARD LOGIC ---
     let controllerIndex = null;
-    let buttonStates = {
-      right: false,
-      left: false,
-      cerci: false
-    };
+    let buttonStates = { right: false, left: false, cerci: false };
 
     window.addEventListener("gamepadconnected", (e) => {
       controllerIndex = e.gamepad.index;
       const gpStatus = document.getElementById("gamepadStatus");
       gpStatus.innerText = `Gamepad: Connected (${e.gamepad.id})`;
       gpStatus.style.color = "#28a745";
-      
-      // Update HTML to show the new mappings
-      document.getElementById("channelSelect").innerHTML = `
-        <option value="right">Right Ant. (Mapped to B/Circle)</option>
-        <option value="left">Left Ant. (Mapped to X/Square)</option>
-        <option value="cerci">Cerci Dual Fire (Mapped to Y/Triangle)</option>
-      `;
-      
       requestAnimationFrame(pollGamepad);
     });
 
@@ -261,14 +243,9 @@
       if (controllerIndex !== null) {
         const gp = navigator.getGamepads()[controllerIndex];
         if (gp) {
-          // Standard Gamepad API Mapping:
-          // Button 1 (Right face button): Right Antenna
-          // Button 2 (Left face button): Left Antenna
-          // Button 3 (Top face button): Cerci Dual Fire
-          
-          checkButton(gp.buttons[1], 'right');
-          checkButton(gp.buttons[2], 'left');
-          checkButton(gp.buttons[3], 'cerci');
+          checkButton(gp.buttons[1], 'right'); // B or Circle
+          checkButton(gp.buttons[2], 'left');  // X or Square
+          checkButton(gp.buttons[3], 'cerci'); // Y or Triangle
         }
         requestAnimationFrame(pollGamepad);
       }
@@ -276,18 +253,16 @@
 
     function checkButton(button, target) {
       if (button && button.pressed) {
-        // Only trigger once per physical press
         if (!buttonStates[target]) {
           buttonStates[target] = true;
           sendStimulation(target);
         }
       } else {
-        // Reset state when button is released
         buttonStates[target] = false;
       }
     }
     
-    // Test mapping for keyboard (Left Arrow, Right Arrow, Up Arrow)
+    // Test mapping for keyboard 
     window.addEventListener("keydown", (e) => {
       if (e.code === "ArrowRight" && !buttonStates.right) { buttonStates.right = true; sendStimulation("right"); }
       if (e.code === "ArrowLeft" && !buttonStates.left) { buttonStates.left = true; sendStimulation("left"); }
