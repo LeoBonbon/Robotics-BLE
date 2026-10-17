@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stimulation Controller</title>
+  <title>Insect Bio-Robotics Panel</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -15,8 +15,8 @@
     .panel {
       background: white;
       border-radius: 14px;
-      padding: 16px;
-      max-width: 420px;
+      padding: 20px;
+      max-width: 800px;
       margin: 12px auto;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
@@ -28,33 +28,69 @@
       border-radius: 10px;
       cursor: pointer;
     }
-    .btn-connect { background: #28a745; color: white; width: 100%; }
-    .btn-send { background: #d9534f; color: white; width: 100%; font-size: 22px; padding: 18px; }
-
-    .btn-step:active { background: #ced4da; }
+    .btn-connect { background: #28a745; color: white; width: 100%; max-width: 300px; }
+    .btn-send { background: #d9534f; color: white; width: 100%; font-size: 22px; padding: 18px; margin-top: 15px; }
     .btn-send:active { background: #c9302c; }
-    .control-row {
+    
+    /* Layout mimicking the reference image */
+    .dashboard {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin: 12px 0;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-top: 20px;
     }
-       select {
-      font-size: 18px;
-      padding: 8px 12px;
-      border-radius: 8px;
+    fieldset {
       border: 1px solid #ccc;
-      width: 100%;
+      border-radius: 8px;
+      padding: 15px 10px;
+      text-align: right;
+      background: #fafafa;
     }
-    .preview {
-      font-family: monospace;
+    legend {
+      font-weight: bold;
+      padding: 0 5px;
+      color: #333;
+    }
+    .row {
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .row label {
+      margin-right: 10px;
+      font-size: 15px;
+    }
+    .row input {
+      width: 60px;
+      padding: 6px;
       font-size: 16px;
-      color: #555;
-      margin-top: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      text-align: center;
     }
-    .btn-step { background: #e9ecef; color: #333; width: 45px; font-size: 18px; padding: 8px 0; margin: 0 2px;}
-    .val-display { font-size: 18px; font-weight: bold; min-width: 70px; display: inline-block; }
+    input[disabled] { background: #e9ecef; color: #6c757d; }
+    
+    .arrow-container {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btn-arrow {
+      background: #00bfff;
+      color: white;
+      font-size: 20px;
+      border: 2px solid #009acd;
+      border-radius: 6px;
+      padding: 5px 15px;
+      cursor: pointer;
+    }
+    .btn-arrow:active { background: #009acd; }
+
     #status { font-weight: bold; margin-top: 10px; color: #6c757d; }
+    select { font-size: 16px; padding: 8px; border-radius: 8px; }
   </style>
 </head>
 <body>
@@ -64,77 +100,73 @@
   <div class="panel">
     <button class="btn btn-connect" onclick="connectToBoard()">Connect to DIALOG-PRPH</button>
     <p id="status">Status: Disconnected</p>
+    <p id="gamepadStatus">Gamepad: Not Detected (Press any button to wake)</p>
   </div>
 
   <div class="panel">
-    <!-- Channel / Pin Target -->
-    <div style="text-align: left; margin-bottom: 14px;">
-      <label style="font-weight: 600;">Target Output:</label>
-      <select id="pinSelect" onchange="updatePreview()">
-        <option value="0">P04 (Pin A)</option>
-        <option value="1">P05 (Pin B)</option>
-        <option value="2">P06 (Pin C)</option>
-        <option value="3">P13 (Pin D)</option>
-        <option value="4" selected>Dual Fire (P04 & P06)</option>
+    <div style="margin-bottom: 15px; text-align: center;">
+      <label style="font-weight: bold; font-size: 18px;">Active Channel (Fires on 'A' Button):</label>
+      <select id="channelSelect">
+        <option value="right">Right Ant. (P04)</option>
+        <option value="left">Left Ant. (P05)</option>
+        <option value="cerci">Cerci (P06)</option>
       </select>
     </div>
 
-    <!-- Frequency Control -->
-    <div class="control-row">
-      <span style="font-weight: 600;">Frequency:</span>
-      <div>
-        <button class="btn btn-step" onclick="adjustFreq(-10)">-10</button>
-        <button class="btn btn-step" onclick="adjustFreq(-1)">-1</button>
-        <span class="val-display" id="freqVal">200 Hz</span>
-        <button class="btn btn-step" onclick="adjustFreq(1)">+1</button>
-        <button class="btn btn-step" onclick="adjustFreq(10)">+10</button>
-      </div>
+    <div class="dashboard">
+      <!-- Frequency Column -->
+      <fieldset>
+        <legend>Frequency Settings</legend>
+        <div class="row"><label>Right Ant. (Hz):</label><input id="freq-right" type="number" value="70"></div>
+        <div class="row"><label>Left Ant. (Hz):</label><input id="freq-left" type="number" value="60"></div>
+        <div class="row"><label>Cerci (Hz):</label><input id="freq-cerci" type="number" value="70"></div>
+        <div class="arrow-container">
+          <button class="btn-arrow" onclick="changeAllFreq(10)">⬆️</button>
+          <button class="btn-arrow" onclick="changeAllFreq(-10)">⬇️</button>
+        </div>
+      </fieldset>
+
+      <!-- Duration Column -->
+      <fieldset>
+        <legend>Duration Settings</legend>
+        <div class="row"><label>Right Ant. (ms):</label><input id="dur-right" type="number" value="500" disabled></div>
+        <div class="row"><label>Left Ant. (ms):</label><input id="dur-left" type="number" value="500" disabled></div>
+        <div class="row"><label>Cerci (ms):</label><input id="dur-cerci" type="number" value="500" disabled></div>
+      </fieldset>
+
+      <!-- Pulse Width Column -->
+      <fieldset>
+        <legend>Pulse Width Settings</legend>
+        <div class="row"><label>Right Ant. (ms):</label><input id="pw-right" type="number" value="10"></div>
+        <div class="row"><label>Left Ant. (ms):</label><input id="pw-left" type="number" value="5"></div>
+        <div class="row"><label>Cerci (ms):</label><input id="pw-cerci" type="number" value="3"></div>
+      </fieldset>
     </div>
 
-    <!-- Duty Cycle Control -->
-    <div class="control-row">
-      <span style="font-weight: 600;">Duty Cycle:</span>
-      <div>
-        <button class="btn btn-step" onclick="adjustDuty(-10)">-10</button>
-        <button class="btn btn-step" onclick="adjustDuty(-1)">-1</button>
-        <span class="val-display" id="dutyVal">50 %</span>
-        <button class="btn btn-step" onclick="adjustDuty(1)">+1</button>
-        <button class="btn btn-step" onclick="adjustDuty(10)">+10</button>
-      </div>
-    </div>
-
-    <div class="preview">
-      Payload: <span id="hexPreview" style="font-weight: bold; color: #007bff;">0x05 0xC8 0x32</span>
-    </div>
-  </div>
-
-  <div class="panel">
     <button class="btn btn-send" onclick="sendStimulation()">SEND STIMULATION</button>
   </div>
 
   <script>
     let rxCharacteristic = null;
-    let freq = 200; // Default 200 Hz
-    let duty = 50;  // Default 50%
-
-   function adjustFreq(delta) {
-      freq = Math.min(255, Math.max(1, freq + delta)); 
-      document.getElementById("freqVal").innerText = freq + " Hz";
-      updatePreview();
+    let stimTimeout = null;
+    
+    // --- UI LOGIC ---
+    function changeAllFreq(delta) {
+      ['freq-right', 'freq-left', 'freq-cerci'].forEach(id => {
+        let el = document.getElementById(id);
+        let val = parseInt(el.value) + delta;
+        el.value = Math.max(1, Math.min(255, val)); // Clamp 1-255 Hz
+      });
     }
 
-    function adjustDuty(delta) {
-      duty = Math.min(100, Math.max(1, duty + delta)); 
-      document.getElementById("dutyVal").innerText = duty + " %";
-      updatePreview();
+    function calculateDuty(freq, pw_ms) {
+      // Period (ms) = 1000 / Freq
+      // Duty Cycle % = (PW / Period) * 100 -> (PW * Freq) / 10
+      let duty = (pw_ms * freq) / 10;
+      return Math.max(1, Math.min(100, Math.round(duty))); // Clamp 1-100%
     }
 
-    function updatePreview() {
-      const pin = parseInt(document.getElementById("pinSelect").value);
-      const toHex = (n) => "0x" + n.toString(16).padStart(2, "0").toUpperCase();
-      document.getElementById("hexPreview").innerText = `${toHex(pin)} ${toHex(freq)} ${toHex(duty)}`;
-    }
-
+    // --- BLE LOGIC ---
     async function connectToBoard() {
       const statusText = document.getElementById("status");
       try {
@@ -162,17 +194,78 @@
         alert("Connect to the board first.");
         return;
       }
+
+      // Map selection to HTML IDs and Firmware Pins
+      const target = document.getElementById("channelSelect").value;
+      let pinNum = 0;
+      if (target === "right") pinNum = 0; // P04
+      if (target === "left") pinNum = 1;  // P05
+      if (target === "cerci") pinNum = 2; // P06
+
+      const freq = parseInt(document.getElementById(`freq-${target}`).value) || 1;
+      const pw = parseInt(document.getElementById(`pw-${target}`).value) || 1;
+      const duration = parseInt(document.getElementById(`dur-${target}`).value) || 500;
+
+      const duty = calculateDuty(freq, pw);
+      const payload = new Uint8Array([pinNum, freq, duty]);
+
       try {
-        const pin = parseInt(document.getElementById("pinSelect").value);
-        const payload = new Uint8Array([pin, freq, duty]);
+        // Send ON command
         await rxCharacteristic.writeValueWithoutResponse(payload);
+
+        // Clear any existing timeout so they don't overlap
+        if (stimTimeout) clearTimeout(stimTimeout);
+
+        // Auto-turn OFF after the fixed duration
+        stimTimeout = setTimeout(async () => {
+          // Sending 0 duty cycle to turn off the hardware
+          const offPayload = new Uint8Array([pinNum, freq, 0]);
+          await rxCharacteristic.writeValueWithoutResponse(offPayload);
+        }, duration);
+
       } catch (err) {
-        document.getElementById("status").innerText = "Send Error: " + err;
-        document.getElementById("status").style.color = "red";
+        console.error("Send Error:", err);
       }
     }
 
-    updatePreview();
+    // --- GAMEPAD (CONTROLLER) LOGIC ---
+    let controllerIndex = null;
+    let isButtonAPressed = false;
+
+    window.addEventListener("gamepadconnected", (e) => {
+      controllerIndex = e.gamepad.index;
+      const gpStatus = document.getElementById("gamepadStatus");
+      gpStatus.innerText = `Gamepad: Connected (${e.gamepad.id})`;
+      gpStatus.style.color = "#28a745";
+      requestAnimationFrame(pollGamepad);
+    });
+
+    window.addEventListener("gamepaddisconnected", (e) => {
+      if (e.gamepad.index === controllerIndex) {
+        controllerIndex = null;
+        const gpStatus = document.getElementById("gamepadStatus");
+        gpStatus.innerText = "Gamepad: Disconnected";
+        gpStatus.style.color = "#6c757d";
+      }
+    });
+
+    function pollGamepad() {
+      if (controllerIndex !== null) {
+        const gp = navigator.getGamepads()[controllerIndex];
+        if (gp) {
+          // Button 0 is standard for 'A' (Xbox) or 'Cross' (PlayStation)
+          if (gp.buttons[0].pressed) {
+            if (!isButtonAPressed) {
+              isButtonAPressed = true;
+              sendStimulation(); 
+            }
+          } else {
+            isButtonAPressed = false;
+          }
+        }
+        requestAnimationFrame(pollGamepad);
+      }
+    }
   </script>
 </body>
 </html>
