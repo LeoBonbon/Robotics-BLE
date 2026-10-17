@@ -146,7 +146,7 @@
     <button class="btn btn-send" onclick="sendStimulation()">SEND STIMULATION</button>
   </div>
 
-  <script>
+ <script>
     let rxCharacteristic = null;
     let stimTimeout = null;
     
@@ -160,8 +160,6 @@
     }
 
     function calculateDuty(freq, pw_ms) {
-      // Period (ms) = 1000 / Freq
-      // Duty Cycle % = (PW / Period) * 100 -> (PW * Freq) / 10
       let duty = (pw_ms * freq) / 10;
       return Math.max(1, Math.min(100, Math.round(duty))); // Clamp 1-100%
     }
@@ -189,18 +187,20 @@
       }
     }
 
-    async function sendStimulation() {
+    // Added targetOverride so the controller can bypass the dropdown menu
+    async function sendStimulation(targetOverride) {
       if (!rxCharacteristic) {
         alert("Connect to the board first.");
         return;
       }
 
-      // Map selection to HTML IDs and Firmware Pins
-      const target = document.getElementById("channelSelect").value;
+      // Use the controller's button target, or fallback to the dropdown if clicking manually
+      const target = targetOverride || document.getElementById("channelSelect").value;
+      
       let pinNum = 0;
       if (target === "right") pinNum = 0; // P04
       if (target === "left") pinNum = 1;  // P05
-      if (target === "cerci") pinNum = 2; // P06
+      if (target === "cerci") pinNum = 4; // Dual Fire (P04 & P06)
 
       const freq = parseInt(document.getElementById(`freq-${target}`).value) || 1;
       const pw = parseInt(document.getElementById(`pw-${target}`).value) || 1;
@@ -210,15 +210,11 @@
       const payload = new Uint8Array([pinNum, freq, duty]);
 
       try {
-        // Send ON command
         await rxCharacteristic.writeValueWithoutResponse(payload);
 
-        // Clear any existing timeout so they don't overlap
         if (stimTimeout) clearTimeout(stimTimeout);
 
-        // Auto-turn OFF after the fixed duration
         stimTimeout = setTimeout(async () => {
-          // Sending 0 duty cycle to turn off the hardware
           const offPayload = new Uint8Array([pinNum, freq, 0]);
           await rxCharacteristic.writeValueWithoutResponse(offPayload);
         }, duration);
@@ -230,13 +226,25 @@
 
     // --- GAMEPAD (CONTROLLER) LOGIC ---
     let controllerIndex = null;
-    let isButtonAPressed = false;
+    let buttonStates = {
+      right: false,
+      left: false,
+      cerci: false
+    };
 
     window.addEventListener("gamepadconnected", (e) => {
       controllerIndex = e.gamepad.index;
       const gpStatus = document.getElementById("gamepadStatus");
       gpStatus.innerText = `Gamepad: Connected (${e.gamepad.id})`;
       gpStatus.style.color = "#28a745";
+      
+      // Update HTML to show the new mappings
+      document.getElementById("channelSelect").innerHTML = `
+        <option value="right">Right Ant. (Mapped to B/Circle)</option>
+        <option value="left">Left Ant. (Mapped to X/Square)</option>
+        <option value="cerci">Cerci Dual Fire (Mapped to Y/Triangle)</option>
+      `;
+      
       requestAnimationFrame(pollGamepad);
     });
 
@@ -253,19 +261,44 @@
       if (controllerIndex !== null) {
         const gp = navigator.getGamepads()[controllerIndex];
         if (gp) {
-          // Button 0 is standard for 'A' (Xbox) or 'Cross' (PlayStation)
-          if (gp.buttons[0].pressed) {
-            if (!isButtonAPressed) {
-              isButtonAPressed = true;
-              sendStimulation(); 
-            }
-          } else {
-            isButtonAPressed = false;
-          }
+          // Standard Gamepad API Mapping:
+          // Button 1 (Right face button): Right Antenna
+          // Button 2 (Left face button): Left Antenna
+          // Button 3 (Top face button): Cerci Dual Fire
+          
+          checkButton(gp.buttons[1], 'right');
+          checkButton(gp.buttons[2], 'left');
+          checkButton(gp.buttons[3], 'cerci');
         }
         requestAnimationFrame(pollGamepad);
       }
     }
+
+    function checkButton(button, target) {
+      if (button && button.pressed) {
+        // Only trigger once per physical press
+        if (!buttonStates[target]) {
+          buttonStates[target] = true;
+          sendStimulation(target);
+        }
+      } else {
+        // Reset state when button is released
+        buttonStates[target] = false;
+      }
+    }
+    
+    // Test mapping for keyboard (Left Arrow, Right Arrow, Up Arrow)
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "ArrowRight" && !buttonStates.right) { buttonStates.right = true; sendStimulation("right"); }
+      if (e.code === "ArrowLeft" && !buttonStates.left) { buttonStates.left = true; sendStimulation("left"); }
+      if (e.code === "ArrowUp" && !buttonStates.cerci) { buttonStates.cerci = true; sendStimulation("cerci"); }
+    });
+    
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "ArrowRight") buttonStates.right = false;
+      if (e.code === "ArrowLeft") buttonStates.left = false;
+      if (e.code === "ArrowUp") buttonStates.cerci = false;
+    });
   </script>
 </body>
 </html>
