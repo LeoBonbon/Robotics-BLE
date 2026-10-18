@@ -61,7 +61,7 @@ bool      sw_pwm_is_high = false;
 #define PORT_LED GPIO_PORT_1
 #define PIN_LED  GPIO_PIN_1
 
-
+void pwm_output_OFF(void);
 
 #ifdef CFG_DEVELOPMENT_DEBUG
 
@@ -170,6 +170,13 @@ void software_pwm_cb(void) {
 
 // TURN ON FUNCTION (Hybrid Hardware / Software)
 void pwm_output_ON(uint8_t pin_no, uint16_t freq, uint8_t duty) {
+
+  // --- NEW FIX: Intercept 0% Duty Cycle ---
+    if (duty == 0) {
+        pwm_output_OFF();
+        return;
+    }
+
     // 1. Clean up any currently running timers
     if (sw_pwm_timer_id != EASY_TIMER_INVALID_TIMER) {
         app_easy_timer_cancel(sw_pwm_timer_id);
