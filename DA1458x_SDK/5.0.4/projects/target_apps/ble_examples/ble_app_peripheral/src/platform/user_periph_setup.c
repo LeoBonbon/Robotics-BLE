@@ -5,28 +5,19 @@
  *
  * @brief Peripherals setup and initialization.
  *
- * Copyright (C) 2015. Dialog Semiconductor Ltd, unpublished work. This computer
- * program includes Confidential, Proprietary Information and is a Trade Secret of
- * Dialog Semiconductor Ltd.  All use, disclosure, and/or reproduction is prohibited
- * unless authorized in writing. All Rights Reserved.
+ * Copyright (C) 2015. Dialog Semiconductor Ltd, unpublished work.
  *
- * <bluetooth.support@diasemi.com> and contributors.
- *
- ****************************************************************************************
- */
-
-/*
- * INCLUDE FILES
  ****************************************************************************************
  */
 #include <stdbool.h>                 // Standard boolean types (true/false)
 #include "rwip_config.h"             // SW configuration
-#include "user_periph_setup.h"       // peripheral configuration
+#include "user_periph_setup.h"       // Peripheral configuration
 #include "global_io.h"
 #include "gpio.h"
 #include "uart.h"                    // UART initialization
 #include "pwm.h"
 #include "app_easy_timer.h"          //Required for Software PWM (< 31 Hz)
+
 // Global variables for Software PWM State Machine
 timer_hnd sw_pwm_timer_id = EASY_TIMER_INVALID_TIMER;
 uint8_t   sw_pwm_pin = 0;
@@ -34,17 +25,7 @@ uint16_t  sw_pwm_high_ticks = 0;
 uint16_t  sw_pwm_low_ticks = 0;
 bool      sw_pwm_is_high = false;
 
-
-
-/**
- ****************************************************************************************
- * @brief Each application reserves its own GPIOs here.
- *
- * @return void
- ****************************************************************************************
- */
-
- // Define 4 physically exposed pins on the HJ-580XP module
+// Define 4 physically exposed pins on the HJ-580XP module
 #define PORT_A GPIO_PORT_0
 #define PIN_A  GPIO_PIN_4    // Physical pad P04
 
@@ -61,27 +42,14 @@ bool      sw_pwm_is_high = false;
 #define PORT_LED GPIO_PORT_1
 #define PIN_LED  GPIO_PIN_1
 
-void pwm_output_OFF(void);
-
 #ifdef CFG_DEVELOPMENT_DEBUG
-
 void GPIO_reservations(void)
 {
-/*
-* Globally reserved GPIOs reservation
-*/
-
-/*
-* Application specific GPIOs reservation. Used only in Development mode (#if DEVELOPMENT_DEBUG)
-
-i.e.
-    RESERVE_GPIO(DESCRIPTIVE_NAME, GPIO_PORT_0, GPIO_PIN_1, PID_GPIO);    //Reserve P_01 as Generic Purpose I/O
-*/
 #ifdef CFG_PRINTF_UART2
     RESERVE_GPIO(UART2_TX, UART2_TX_GPIO_PORT, UART2_TX_GPIO_PIN, PID_UART2_TX);
     RESERVE_GPIO(UART2_RX, UART2_RX_GPIO_PORT, UART2_RX_GPIO_PIN, PID_UART2_RX);
 #endif
-   // Reserve all 4 physical pins
+    // Reserve stimulation pads and status LED
     RESERVE_GPIO(STIM_A, PORT_A, PIN_A, PID_GPIO);
     RESERVE_GPIO(STIM_B, PORT_B, PIN_B, PID_GPIO);
     RESERVE_GPIO(STIM_C, PORT_C, PIN_C, PID_GPIO);
@@ -90,43 +58,40 @@ i.e.
 }
 #endif // CFG_DEVELOPMENT_DEBUG
 
-void set_pad_functions(void)        // set gpio port function mode
+void set_pad_functions(void)
 {
 #ifdef CFG_PRINTF_UART2
     GPIO_ConfigurePin(UART2_TX_GPIO_PORT, UART2_TX_GPIO_PIN, OUTPUT, PID_UART2_TX, false);
     GPIO_ConfigurePin(UART2_RX_GPIO_PORT, UART2_RX_GPIO_PIN, INPUT, PID_UART2_RX, false);
 #endif
-     // BOOT REQUIREMENT: Initialize all 4 physical pins as plain GPIO held LOW (false)
+    // Boot: set stimulation pads and status LED LOW
     GPIO_ConfigurePin(PORT_A, PIN_A, OUTPUT, PID_GPIO, false);
     GPIO_ConfigurePin(PORT_B, PIN_B, OUTPUT, PID_GPIO, false);
     GPIO_ConfigurePin(PORT_C, PIN_C, OUTPUT, PID_GPIO, false);
     GPIO_ConfigurePin(PORT_D, PIN_D, OUTPUT, PID_GPIO, false);
     GPIO_ConfigurePin(PORT_LED, PIN_LED, OUTPUT, PID_GPIO, false);
 }
+
 void periph_init(void)
 {
-    // Power up peripherals' power domain
+    // Power up peripherals power domain
     SetBits16(PMU_CTRL_REG, PERIPH_SLEEP, 0);
     while (!(GetWord16(SYS_STAT_REG) & PER_IS_UP));
 
     SetBits16(CLK_16M_REG, XTAL16_BIAS_SH_ENABLE, 1);
 
-    //rom patch
+    // ROM patch
     patch_func();
 
-    //Init pads
+    // Init pads
     set_pad_functions();
-
-    // (Re)Initialize peripherals
-    // i.e.
-    //  uart_init(UART_BAUDRATE_115K2, 3);
 
 #ifdef CFG_PRINTF_UART2
     SetBits16(CLK_PER_REG, UART2_ENABLE, 1);
     uart2_init(UART_BAUDRATE_115K2, 3);
 #endif
 
-   // Enable the pads
+    // Enable pads
     SetBits16(SYS_CTRL_REG, PAD_LATCH_EN, 1);
 }
 
@@ -168,15 +133,17 @@ void software_pwm_cb(void) {
     }
 }
 
+void pwm_output_OFF();
+
 // TURN ON FUNCTION (Hybrid Hardware / Software)
 void pwm_output_ON(uint8_t pin_no, uint16_t freq, uint8_t duty) {
-
-  // --- NEW FIX: Intercept 0% Duty Cycle ---
+		
+		// 1. Intercept the OFF command
     if (duty == 0) {
         pwm_output_OFF();
         return;
     }
-
+		
     // 1. Clean up any currently running timers
     if (sw_pwm_timer_id != EASY_TIMER_INVALID_TIMER) {
         app_easy_timer_cancel(sw_pwm_timer_id);
@@ -185,18 +152,12 @@ void pwm_output_ON(uint8_t pin_no, uint16_t freq, uint8_t duty) {
     timer0_stop();
     SetBits16(CLK_PER_REG, TMR_ENABLE, 0);
 
-    // 2. Set all target pins to standard GPIO Output initially
-    switch(pin_no) {
-        case 0: GPIO_ConfigurePin(PORT_A, PIN_A, OUTPUT, PID_GPIO, false); break;
-        case 1: GPIO_ConfigurePin(PORT_B, PIN_B, OUTPUT, PID_GPIO, false); break;
-        case 2: GPIO_ConfigurePin(PORT_C, PIN_C, OUTPUT, PID_GPIO, false); break;
-        case 3: GPIO_ConfigurePin(PORT_D, PIN_D, OUTPUT, PID_GPIO, false); break;
-        case 4: 
-            GPIO_ConfigurePin(PORT_C, PIN_C, OUTPUT, PID_GPIO, false);
-            GPIO_ConfigurePin(PORT_A, PIN_A, OUTPUT, PID_GPIO, false);
-            break;
-        default: return; // Invalid pin
-    }
+    // 2. Set ALL target pins to standard GPIO Output (strictly LOW)
+    // This prevents the previous hardware PWM pin from bleeding into the new one
+    GPIO_ConfigurePin(PORT_A, PIN_A, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PORT_B, PIN_B, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PORT_C, PIN_C, OUTPUT, PID_GPIO, false);
+    GPIO_ConfigurePin(PORT_D, PIN_D, OUTPUT, PID_GPIO, false);
 
     // 3. Traffic Cop: Route to Software PWM or Hardware PWM
     if (freq < 31) {
